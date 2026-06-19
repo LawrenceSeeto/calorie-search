@@ -21,7 +21,7 @@ interface RequestBody {
   };
 }
 
-interface ClaudeRecipe {
+interface AiRecipe {
   title: string;
   steps: string[];
   prepTimeBand: 'no-cook' | 'quick' | 'cooked';
@@ -79,61 +79,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  const apiKey = process.env['GEMINI_API_KEY'];
   if (!apiKey) return res.status(502).json({ error: 'AI recipe generation is not configured' });
 
   const body = req.body as RequestBody;
   if (!body?.basket?.length) return res.status(400).json({ error: 'basket is required' });
 
-  const userAgent = process.env['CALORIE_SEARCH_USER_AGENT'] ?? 'CalorieSearch-AUNZ/1.0';
-
   try {
-    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'user-agent': userAgent,
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: SYSTEM_PROMPT }],
+          },
+          contents: [
+            { role: 'user', parts: [{ text: buildUserPrompt(body.basket, body.preferences) }] },
+          ],
+          generationConfig: {
+            temperature: 0.8,
+            maxOutputTokens: 2048,
+          },
+        }),
       },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2048,
-        system: SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content: buildUserPrompt(body.basket, body.preferences) },
-        ],
-      }),
-    });
+    );
 
-    if (!anthropicRes.ok) {
-      const err = await anthropicRes.text();
-      console.error('[recipe] Anthropic error:', err);
+    if (!geminiRes.ok) {
+      const err = await geminiRes.text();
+      console.error('[recipe] Gemini error:', err);
       return res.status(502).json({ error: 'AI generation failed' });
     }
 
-    const anthropicData = await anthropicRes.json() as {
-      content: Array<{ type: string; text: string }>;
+    const geminiData = await geminiRes.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
 
-    const text = anthropicData.content.find(c => c.type === 'text')?.text ?? '[]';
+    const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
 
-    let claudeRecipes: ClaudeRecipe[];
+    // Gemini may wrap output in a markdown code fence — strip it
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+
+    let aiRecipes: AiRecipe[];
     try {
-      claudeRecipes = JSON.parse(text) as ClaudeRecipe[];
-      if (!Array.isArray(claudeRecipes)) throw new Error('not an array');
+      aiRecipes = JSON.parse(cleaned) as AiRecipe[];
+      if (!Array.isArray(aiRecipes)) throw new Error('not an array');
     } catch {
-      console.error('[recipe] Failed to parse Claude output:', text);
+      console.error('[recipe] Failed to parse Gemini output:', cleaned);
       return res.status(502).json({ error: 'AI returned invalid format' });
     }
 
     // Build a lookup map from the basket
     const basketByCode = new Map(body.basket.map(b => [b.code, b]));
 
-    const recipes: RecipeRecommendation[] = claudeRecipes
+    const recipes: RecipeRecommendation[] = aiRecipes
       .filter(r => r.title && Array.isArray(r.steps) && r.steps.length > 0)
       .map((r): RecipeRecommendation => {
-        const usedProducts: SelectedProduct[] = r.usedProductCodes
+        const usedProducts: SelectedProduct[] = (r.usedProductCodes ?? [])
           .map(code => {
             const b = basketByCode.get(code);
             if (!b) return null;
@@ -160,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
           .filter((sp): sp is SelectedProduct => sp !== null);
 
-        // Fall back to all basket items if Claude returned no codes
+        // Fall back to all basket items if no codes matched
         const finalProducts = usedProducts.length > 0 ? usedProducts : body.basket.map(b => ({
           product: {
             code: b.code, name: b.name, brand: b.brand,
@@ -182,9 +185,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const nutrition: NutritionEstimate = {
           kcalPer100g: Math.round(r.kcalPer100g ?? 100),
-          proteinG: r.proteinG !== null && r.proteinG !== undefined ? Math.round(r.proteinG) : null,
-          fatG: r.fatG !== null && r.fatG !== undefined ? Math.round(r.fatG) : null,
-          carbsG: r.carbsG !== null && r.carbsG !== undefined ? Math.round(r.carbsG) : null,
+          proteinG: r.proteinG != null ? Math.round(r.proteinG) : null,
+          fatG: r.fatG != null ? Math.round(r.fatG) : null,
+          carbsG: r.carbsG != null ? Math.round(r.carbsG) : null,
         };
 
         return {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { Product } from '../types';
 
 const PLACEHOLDER =
@@ -14,8 +14,24 @@ function badgeClass(kcal: number): string {
   return 'cal-high';
 }
 
+function buildCandidates(product: Product): string[] {
+  const urls: string[] = [];
+  if (product.imageUrl) urls.push(product.imageUrl);
+  if (product.code) {
+    urls.push(`https://productimages.coles.com.au/productimages/${product.code}/front/175.jpg`);
+  }
+  urls.push(PLACEHOLDER);
+  return urls;
+}
+
 export default function ProductCard({ product }: Props) {
-  const [imgSrc, setImgSrc] = useState(product.imageUrl ?? PLACEHOLDER);
+  const candidates = useMemo(
+    () => buildCandidates(product),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [product.imageUrl, product.code],
+  );
+  const [idx, setIdx] = useState(0);
+  const src = candidates[idx] ?? PLACEHOLDER;
 
   return (
     <a
@@ -25,10 +41,10 @@ export default function ProductCard({ product }: Props) {
       rel="noopener noreferrer"
     >
       <img
-        src={imgSrc}
+        src={src}
         alt={product.name}
         loading="lazy"
-        onError={() => setImgSrc(PLACEHOLDER)}
+        onError={() => setIdx(i => Math.min(i + 1, candidates.length - 1))}
       />
       <div className="card-body">
         <div className="card-name">{product.name}</div>

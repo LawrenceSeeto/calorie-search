@@ -7,6 +7,14 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    .visually-hidden {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0);
+      white-space: nowrap; border: 0;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #f5f5f5;
@@ -177,6 +185,47 @@
       color: #aaa;
       font-size: 0.95rem;
     }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+
+    .chip {
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      background: #f3f4f6;
+      border: 1px solid #e5e5e5;
+      border-radius: 20px;
+      cursor: pointer;
+      color: #444;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .chip:hover { background: #e5e7eb; border-color: #d1d5db; }
+
+    .retry-btn {
+      margin-top: 12px;
+      padding: 8px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: #fff;
+      color: #111;
+      border: 1.5px solid #d1d5db;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .retry-btn:hover { background: #f3f4f6; }
+
+    @media (max-width: 480px) {
+      .search-bar { flex-direction: column; }
+      .search-bar button { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -185,66 +234,115 @@
   <h1>Calorie Search</h1>
   <p>Find the lowest-calorie products for any food — sorted by kcal per 100g</p>
   <div class="search-bar">
+    <label for="q" class="visually-hidden">Search for a food</label>
     <input id="q" type="search" placeholder="e.g. yogurt, chips, protein bar…" autocomplete="off" />
     <button id="btn">Search</button>
+  </div>
+  <div class="chips" id="chips">
+    <button class="chip" data-q="yogurt">yogurt</button>
+    <button class="chip" data-q="chips">chips</button>
+    <button class="chip" data-q="cereal">cereal</button>
+    <button class="chip" data-q="protein bar">protein bar</button>
+    <button class="chip" data-q="bread">bread</button>
   </div>
 </header>
 
 <main>
   <div class="spinner" id="spinner"></div>
-  <div id="status" class="status"></div>
+  <div id="status" class="status" aria-live="polite" aria-atomic="true"></div>
   <div id="results-label" class="results-label"></div>
   <div class="grid" id="grid"></div>
   <div class="hint" id="hint">Type a food name above to find the lowest-calorie options.</div>
 </main>
 
 <script>
-  const input    = document.getElementById('q');
-  const btn      = document.getElementById('btn');
-  const spinner  = document.getElementById('spinner');
-  const status   = document.getElementById('status');
-  const label    = document.getElementById('results-label');
-  const grid     = document.getElementById('grid');
-  const hint     = document.getElementById('hint');
+  const input   = document.getElementById('q');
+  const btn     = document.getElementById('btn');
+  const spinner = document.getElementById('spinner');
+  const status  = document.getElementById('status');
+  const label   = document.getElementById('results-label');
+  const grid    = document.getElementById('grid');
+  const hint    = document.getElementById('hint');
+  const chips   = document.getElementById('chips');
 
   const PLACEHOLDER = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23f3f4f6"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="%23d1d5db" font-size="32">🥫</text></svg>';
 
-  let debounceTimer = null;
-  let currentQuery  = '';
+  let debounceTimer  = null;
+  let currentQuery   = '';
+  let currentAbort   = null;
+  let lastQuery      = '';
 
-  function calorieBadge(kcal) {
-    const cls = kcal < 100 ? 'cal-low' : kcal < 300 ? 'cal-medium' : 'cal-high';
-    return `<span class="calorie-badge ${cls}">${Math.round(kcal)} kcal / 100g</span>`;
-  }
-
-  function renderCard(p) {
+  function makeCard(p) {
     const name   = p.product_name || 'Unknown product';
     const brand  = p.brands || '';
     const kcal   = p.nutriments['energy-kcal_100g'];
     const imgSrc = p.image_front_small_url || PLACEHOLDER;
 
-    return `
-      <div class="card">
-        <img src="${imgSrc}" alt="${name}" loading="lazy" onerror="this.src='${PLACEHOLDER}'" />
-        <div class="card-body">
-          <div class="card-name">${name}</div>
-          ${brand ? `<div class="card-brand">${brand}</div>` : ''}
-        </div>
-        ${calorieBadge(kcal)}
-      </div>`;
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const img = document.createElement('img');
+    img.src = imgSrc;
+    img.alt = name;
+    img.loading = 'lazy';
+    img.addEventListener('error', () => { img.src = PLACEHOLDER; });
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'card-name';
+    nameEl.textContent = name;
+    body.appendChild(nameEl);
+
+    if (brand) {
+      const brandEl = document.createElement('div');
+      brandEl.className = 'card-brand';
+      brandEl.textContent = brand;
+      body.appendChild(brandEl);
+    }
+
+    const cls = kcal < 100 ? 'cal-low' : kcal < 300 ? 'cal-medium' : 'cal-high';
+    const badge = document.createElement('span');
+    badge.className = `calorie-badge ${cls}`;
+    badge.textContent = `${Math.round(kcal)} kcal / 100g`;
+
+    card.appendChild(img);
+    card.appendChild(body);
+    card.appendChild(badge);
+    return card;
   }
 
   function setLoading(on) {
-    spinner.style.display  = on ? 'block' : 'none';
-    input.disabled         = on;
-    btn.disabled           = on;
-    if (on) { label.textContent = ''; grid.innerHTML = ''; status.textContent = ''; hint.style.display = 'none'; }
+    spinner.style.display = on ? 'block' : 'none';
+    btn.disabled = on;
+    if (on) {
+      label.textContent = '';
+      grid.innerHTML = '';
+      status.textContent = '';
+      hint.style.display = 'none';
+      chips.style.display = 'none';
+    }
   }
 
   async function search(q) {
     q = q.trim();
-    if (!q) return;
+    if (!q) {
+      currentQuery = '';
+      label.textContent = '';
+      grid.innerHTML = '';
+      status.textContent = '';
+      hint.style.display = '';
+      chips.style.display = '';
+      return;
+    }
+
     currentQuery = q;
+    lastQuery = q;
+
+    if (currentAbort) currentAbort.abort();
+    currentAbort = new AbortController();
+    const signal = currentAbort.signal;
 
     setLoading(true);
 
@@ -254,15 +352,12 @@
     url.searchParams.set('page_size', '60');
 
     try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'CalorieSearch/1.0 (github-pages)' }
-      });
+      const res = await fetch(url, { signal });
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
 
       const data = await res.json();
 
-      // Guard: stale response if user typed a new query while fetching
       if (q !== currentQuery) return;
 
       const products = (data.products || [])
@@ -274,18 +369,31 @@
 
       if (products.length === 0) {
         status.textContent = `No products with calorie data found for "${q}". Try a different search term.`;
-        label.textContent  = '';
-        grid.innerHTML     = '';
+        label.textContent = '';
         return;
       }
 
       label.textContent = `Showing ${products.length} results for "${q}" — sorted lowest to highest calories`;
-      grid.innerHTML    = products.map(renderCard).join('');
+      grid.innerHTML = '';
+      products.forEach(p => grid.appendChild(makeCard(p)));
 
     } catch (err) {
-      if (q !== currentQuery) return;
+      if (signal.aborted || q !== currentQuery) return;
       setLoading(false);
-      status.innerHTML = `<span class="error-msg">Could not reach the food database. Check your connection and try again.</span>`;
+
+      const msg = document.createElement('span');
+      msg.className = 'error-msg';
+      msg.textContent = 'Could not reach the food database. Check your connection and try again.';
+
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'retry-btn';
+      retryBtn.textContent = 'Try again';
+      retryBtn.addEventListener('click', () => search(lastQuery));
+
+      status.innerHTML = '';
+      status.appendChild(msg);
+      status.appendChild(document.createElement('br'));
+      status.appendChild(retryBtn);
     }
   }
 
@@ -300,9 +408,20 @@
 
   input.addEventListener('input', () => {
     clearTimeout(debounceTimer);
-    if (input.value.trim().length > 1) {
+    const val = input.value.trim();
+    if (val.length > 1) {
       debounceTimer = setTimeout(() => search(input.value), 400);
+    } else if (val.length === 0) {
+      search('');
     }
+  });
+
+  chips.addEventListener('click', e => {
+    const chip = e.target.closest('[data-q]');
+    if (!chip) return;
+    const q = chip.dataset.q;
+    input.value = q;
+    search(q);
   });
 </script>
 </body>

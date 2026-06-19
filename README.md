@@ -1,23 +1,50 @@
 # Calorie Search
 
-A lightweight website that searches food products and returns results sorted by lowest calories first (kcal per 100g).
+A website that searches food products and returns results sorted by lowest calories first (kcal per 100g). Targets Australia & New Zealand products.
 
-**Live site:** https://YOUR-USERNAME.github.io/calorie-search/
+**Live site:** https://YOUR-PROJECT.vercel.app
 
 ## How it works
 
-- Searches the [Open Food Facts](https://world.openfoodfacts.org/) database (free, no API key required, 900k+ products)
-- Filters results to only show products with verified calorie data
+- Searches [Open Food Facts](https://world.openfoodfacts.org/) via a backend proxy (no API key required)
+- Filters results to products with verified calorie data
 - Sorts by calories per 100g, lowest first
 - Colour-coded badges: green (< 100 kcal), yellow (100–300 kcal), red (> 300 kcal)
 
-## Deploy to GitHub Pages
-
-1. Create a new **public** repository on GitHub
-2. Push this folder to the `main` branch
-3. Go to **Settings → Pages → Source: main branch** → Save
-4. Your site will be live at `https://<your-username>.github.io/<repo-name>/`
-
 ## Tech
 
-Single HTML file — no build tools, no dependencies, no cost.
+- **Frontend:** Vite + React 18 + TypeScript
+- **Backend:** Vercel serverless route at `/api/search`
+- **Hosting:** Vercel
+
+## Local development
+
+```sh
+npm install
+npm run dev      # starts vercel dev (frontend + API together)
+```
+
+Requires the [Vercel CLI](https://vercel.com/docs/cli): `npm i -g vercel`
+
+## Environment variables
+
+Set these in Vercel project settings (not committed):
+
+| Variable | Description |
+|---|---|
+| `CALORIE_SEARCH_USER_AGENT` | Sent on every OFN request per their ToS, e.g. `CalorieSearch-AUNZ/1.0 (you@example.com)` |
+
+## Deploy to Vercel
+
+1. Push this repo to GitHub
+2. Import the repo at [vercel.com/new](https://vercel.com/new)
+3. Set the `CALORIE_SEARCH_USER_AGENT` environment variable in project settings
+4. Deploy — Vercel auto-detects the Vite framework
+
+## Tests
+
+```sh
+npm run test        # run Vitest tests
+npm run typecheck   # TypeScript type check
+npm run build       # production build
+```

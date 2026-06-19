@@ -4,29 +4,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single-file static web app (`index.html`) — no build step, no dependencies, no framework. Open the file directly in a browser to run it.
+A Vite + React + TypeScript web app with a Vercel serverless API route. Run with `npm run dev` (requires Vercel CLI).
 
 ## Architecture
 
-Everything lives in `index.html`:
-- **CSS** — inline `<style>` block; uses CSS Grid for the card layout
-- **HTML** — static shell with a search bar, spinner, status text, and a results grid
-- **JS** — vanilla script at the bottom; no modules, no bundler
+```
+src/          React frontend (Vite, TypeScript strict)
+api/          Vercel serverless function
+api/__tests__ Vitest unit tests
+```
 
 ### Data flow
 
-1. User types a query → debounced 400ms `input` handler or immediate `Enter`/button handler fires `search(q)`
-2. `search()` fires **two parallel fetches** to `https://world.openfoodfacts.org/api/v2/search` — one with `countries_tags=en:australia`, one with `countries_tags=en:new-zealand` — and merges + deduplicates the results on the `code` (barcode) field
-3. Results are filtered to products with a numeric `energy-kcal_100g` value, sorted ascending, capped at 20
-4. `makeCard()` builds each card using `document.createElement` + `textContent` (never `innerHTML`) to prevent XSS from user-submitted OFN product data
+1. User submits a query → `useCallback` in `App.tsx` fires `search(q)` (debounced 400ms on input, immediate on Enter/button/chip)
+2. `App.tsx` calls `GET /api/search?q=<term>` with an `AbortController` signal and `currentQueryRef` race guard
+3. `/api/search` fires **two parallel fetches** to `https://search.openfoodfacts.org/search` — one per country (AU, NZ) — merges + deduplicates on `code`, normalises to the `Product` schema, sorts ascending by `kcalPer100g`, and returns paginated JSON
+4. Frontend renders `ProductGrid` (success), `EmptyState` (idle/empty), or `SearchStatus` error block
 
-### Country filtering
+### Why a backend proxy
 
-Two parallel fetches are made rather than one, because the OFN v2 `countries_tags` parameter reliably accepts one tag per request; comma-separated multi-value behaviour is undocumented. After both resolve, products are merged and deduplicated by `code` field (with a `product_name|brands` fallback for products missing a barcode).
+The `search.openfoodfacts.org/search` endpoint (search-a-licious) lacks CORS headers, so it cannot be called from the browser. The v2 API at `world.openfoodfacts.org` was returning 503s. The proxy at `/api/search` solves both issues and adds `Cache-Control: s-maxage=300, stale-while-revalidate=60`.
+
+### Normalization (`api/search.ts`)
+
+- `normalizeKcal()` — uses `energy-kcal_100g` directly; falls back to `energy_100g` (kJ) ÷ 4.184
+- `dedupeByCode()` — deduplicates by `code` (barcode), falls back to `product_name|brands`
+- `normalizeProduct()` — returns `null` for products with no calorie data (filtered out before sorting)
 
 ### Race-condition guard
 
-`currentQuery` tracks the in-flight query string. Responses whose `q` doesn't match `currentQuery` are silently dropped. An `AbortController` signal is also passed to both fetches so cancelled requests are torn down at the network layer, not just ignored at render time.
+`currentQueryRef` in `App.tsx` tracks the latest in-flight query. Responses that arrive after a newer search has started are silently dropped. `AbortController` tears down the fetch at the network layer.
+
+## Product schema (`src/types.ts`)
+
+```ts
+interface Product {
+  code, name, brand, imageUrl, kcalPer100g,
+  quantity, servingSize, countries, sourceUrl
+}
+interface SearchResponse { results, total, page, pageSize }
+```
 
 ## Calorie badge thresholds
 
@@ -36,6 +53,22 @@ Two parallel fetches are made rather than one, because the OFN v2 `countries_tag
 | `cal-medium` (yellow) | 100–299 kcal/100g |
 | `cal-high` (red) | ≥ 300 kcal/100g |
 
+## Components
+
+| File | Responsibility |
+|------|----------------|
+| `App.tsx` | State machine, `search()` callback, layout |
+| `SearchForm.tsx` | Input, debounce (400ms), button |
+| `SearchChips.tsx` | Preset query chips (shown in idle state only) |
+| `SearchStatus.tsx` | Spinner (loading), error message + retry button |
+| `ProductGrid.tsx` | Results label + card grid |
+| `ProductCard.tsx` | Individual product card with image fallback |
+| `EmptyState.tsx` | Idle hint or no-results message |
+
+## Environment variable
+
+`CALORIE_SEARCH_USER_AGENT` — set in Vercel project settings. Sent on every upstream OFN request per their ToS.
+
 ## Deployment
 
-Push to a public GitHub repo and enable **Settings → Pages → Source: main branch**. No build step needed — GitHub Pages serves `index.html` directly.
+Push to GitHub → import at vercel.com/new → set env var → deploy. Vercel auto-detects Vite.

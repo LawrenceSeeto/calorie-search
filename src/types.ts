@@ -2,8 +2,10 @@ export interface Product {
   code: string;
   name: string;
   brand: string;
-  imageUrl: string | null;
   kcalPer100g: number;
+  proteinPer100g: number | null;
+  fatPer100g: number | null;
+  carbsPer100g: number | null;
   quantity: string | null;
   servingSize: string | null;
   countries: string[];

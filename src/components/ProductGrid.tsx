@@ -13,11 +13,11 @@ export default function ProductGrid({ results, total, query }: Props) {
       <div className="results-label">
         Showing {results.length} of {total} results for &ldquo;{query}&rdquo; — sorted lowest to highest calories
       </div>
-      <div className="grid">
+      <ul className="product-list">
         {results.map(p => (
           <ProductCard key={p.code || `${p.name}|${p.brand}`} product={p} />
         ))}
-      </div>
+      </ul>
     </>
   );
 }

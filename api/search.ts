@@ -49,10 +49,20 @@ export function dedupeByCode(products: RawProduct[]): RawProduct[] {
   });
 }
 
+function hasEnglishName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  const ascii = trimmed.replace(/[^\x00-\x7F]/g, '');
+  return ascii.length / trimmed.length >= 0.5;
+}
+
 export function normalizeProduct(p: RawProduct): Product | null {
   const n = p.nutriments ?? {};
   const kcalPer100g = normalizeKcal(n);
   if (kcalPer100g === null) return null;
+
+  const name = String(p.product_name ?? '');
+  if (name && !hasEnglishName(name)) return null;
 
   const code = String(p.code ?? '');
   const imageUrl =
@@ -64,7 +74,7 @@ export function normalizeProduct(p: RawProduct): Product | null {
 
   return {
     code,
-    name: String(p.product_name ?? 'Unknown product'),
+    name: name || 'Unknown product',
     brand: String(p.brands ?? ''),
     kcalPer100g: Math.round(kcalPer100g),
     proteinPer100g: normalizeMacro(n['proteins_100g']),

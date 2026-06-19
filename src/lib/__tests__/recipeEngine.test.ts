@@ -3,7 +3,7 @@ import { classifyProduct, generateRecipes } from '../recipeEngine';
 import type { SelectedProduct, RecipePreference } from '../../types';
 
 const BASE_PREFS: RecipePreference = {
-  maxKcal: 500,
+  maxKcal: 200,
   servings: 1,
   mealType: 'any',
   prepStyle: 'any',
@@ -118,7 +118,7 @@ describe('generateRecipes', () => {
     const prefs: RecipePreference = { ...BASE_PREFS, maxKcal: 300 };
     const result = generateRecipes([sel(yogurt, 150)], prefs);
     for (const recipe of result.recipes) {
-      expect(recipe.nutrition.kcalPerServing).toBeLessThanOrEqual(300);
+      expect(recipe.nutrition.kcalPer100g).toBeLessThanOrEqual(300);
     }
   });
 
@@ -131,7 +131,7 @@ describe('generateRecipes', () => {
       fatPer100g: 7,
       carbsPer100g: 66,
     });
-    const prefs: RecipePreference = { ...BASE_PREFS, maxKcal: 10 };
+    const prefs: RecipePreference = { ...BASE_PREFS, maxKcal: 5 };
     const result = generateRecipes([sel(oats, 100)], prefs);
     expect(result.warning).toBe('no-templates-match');
   });

@@ -1,4 +1,4 @@
-import { useState, useReducer, useEffect, useCallback } from 'react';
+import { useState, useReducer, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import SearchForm from './components/SearchForm';
 import SearchChips from './components/SearchChips';
@@ -14,13 +14,15 @@ import type {
   Product,
   SelectedProduct,
   RecipePreference,
+  RecipeRecommendation,
 } from './types';
 import { loadBasket, saveBasket } from './lib/basketStorage';
+import { loadSavedRecipes, saveSavedRecipes } from './lib/savedRecipesStorage';
 
 // ─── Basket reducer ───────────────────────────────────────────────────────────
 
 const DEFAULT_PREFERENCES: RecipePreference = {
-  maxKcal: 450,
+  maxKcal: 200,
   servings: 1,
   mealType: 'any',
   prepStyle: 'any',
@@ -90,6 +92,25 @@ export default function App() {
   useEffect(() => {
     saveBasket(basket.items, basket.preferences);
   }, [basket.items, basket.preferences]);
+
+  // ── Saved recipes ─────────────────────────────────────────────────────────────
+  const [savedRecipes, setSavedRecipes] = useState<RecipeRecommendation[]>(
+    () => loadSavedRecipes(),
+  );
+
+  useEffect(() => {
+    saveSavedRecipes(savedRecipes);
+  }, [savedRecipes]);
+
+  const savedIds = useMemo(() => new Set(savedRecipes.map(r => r.id)), [savedRecipes]);
+
+  const handleToggleSave = useCallback((recipe: RecipeRecommendation) => {
+    setSavedRecipes(prev =>
+      prev.some(r => r.id === recipe.id)
+        ? prev.filter(r => r.id !== recipe.id)
+        : [...prev, recipe],
+    );
+  }, []);
 
   // ── Search query ─────────────────────────────────────────────────────────────
   const { data, isLoading, isError, error, refetch } = useQuery<SearchResponse, Error>({
@@ -196,7 +217,13 @@ export default function App() {
             onClear={handleClear}
             onPreferencesChange={handlePreferencesChange}
           />
-          <RecipeResults items={basket.items} preferences={basket.preferences} />
+          <RecipeResults
+            items={basket.items}
+            preferences={basket.preferences}
+            savedIds={savedIds}
+            savedRecipes={savedRecipes}
+            onToggleSave={handleToggleSave}
+          />
         </div>
       </div>
     </>

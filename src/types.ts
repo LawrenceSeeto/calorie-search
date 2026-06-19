@@ -56,7 +56,7 @@ export interface RecipeIngredient {
 }
 
 export interface NutritionEstimate {
-  kcalPerServing: number;
+  kcalPer100g: number;
   proteinG: number | null;
   fatG: number | null;
   carbsG: number | null;

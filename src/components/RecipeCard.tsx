@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Clock, UtensilsCrossed } from 'lucide-react';
+import { Bookmark, ChevronDown, ChevronUp, Clock, UtensilsCrossed } from 'lucide-react';
 import type { RecipeRecommendation } from '../types';
 
 interface Props {
   recipe: RecipeRecommendation;
+  isSaved: boolean;
+  onToggleSave: (recipe: RecipeRecommendation) => void;
 }
 
 function calClass(kcal: number): string {
@@ -24,7 +26,7 @@ const MEAL_LABELS: Record<string, string> = {
   snack: 'Snack',
 };
 
-export default function RecipeCard({ recipe }: Props) {
+export default function RecipeCard({ recipe, isSaved, onToggleSave }: Props) {
   const [stepsOpen, setStepsOpen] = useState(false);
   const { nutrition } = recipe;
 
@@ -32,6 +34,14 @@ export default function RecipeCard({ recipe }: Props) {
     <article className="recipe-card">
       <div className="recipe-card-header">
         <h3 className="recipe-title">{recipe.title}</h3>
+        <button
+          type="button"
+          className={`save-btn${isSaved ? ' save-btn-active' : ''}`}
+          onClick={() => onToggleSave(recipe)}
+          aria-label={isSaved ? 'Unsave recipe' : 'Save recipe'}
+        >
+          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} aria-hidden="true" />
+        </button>
         <div className="recipe-chips">
           {recipe.mealTypes.map(m => (
             <span key={m} className="recipe-chip recipe-chip-meal">{MEAL_LABELS[m] ?? m}</span>
@@ -44,8 +54,8 @@ export default function RecipeCard({ recipe }: Props) {
       </div>
 
       <div className="recipe-nutrition">
-        <span className={`macro-pill ${calClass(nutrition.kcalPerServing)}`}>
-          {nutrition.kcalPerServing} kcal / serving
+        <span className={`macro-pill ${calClass(nutrition.kcalPer100g)}`}>
+          {nutrition.kcalPer100g} kcal / 100g
         </span>
         {nutrition.proteinG !== null && (
           <span className="macro-pill macro-protein">{nutrition.proteinG}g protein</span>

@@ -30,23 +30,23 @@ export default function RecipePreferences({ preferences, onChange }: Props) {
 
       <div className="pref-row">
         <label className="pref-label" htmlFor="max-kcal">
-          Max kcal / serving
+          Max kcal / 100g
           <strong className="pref-value">{preferences.maxKcal}</strong>
         </label>
         <input
           id="max-kcal"
           type="range"
-          min={200}
-          max={800}
-          step={25}
+          min={50}
+          max={400}
+          step={10}
           value={preferences.maxKcal}
           onChange={e => set('maxKcal', Number(e.target.value))}
           className="kcal-slider"
-          aria-label="Maximum calories per serving"
+          aria-label="Maximum calories per 100g"
         />
         <div className="slider-labels">
-          <span>200</span>
-          <span>800</span>
+          <span>50</span>
+          <span>400</span>
         </div>
       </div>
 

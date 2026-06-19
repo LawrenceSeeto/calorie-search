@@ -273,30 +273,33 @@ const TEMPLATES: RecipeTemplate[] = [
 function calcNutrition(
   usedProducts: SelectedProduct[],
   staples: RecipeIngredient[],
-  servings: number,
 ): NutritionEstimate {
   let kcal = 0;
   let protein = 0;
   let fat = 0;
   let carbs = 0;
   let hasMacros = false;
+  let totalGrams = 0;
 
   for (const { product, grams } of usedProducts) {
     kcal += (product.kcalPer100g * grams) / 100;
     if (product.proteinPer100g !== null) { protein += (product.proteinPer100g * grams) / 100; hasMacros = true; }
     if (product.fatPer100g !== null) fat += (product.fatPer100g * grams) / 100;
     if (product.carbsPer100g !== null) carbs += (product.carbsPer100g * grams) / 100;
+    totalGrams += grams;
   }
 
   for (const s of staples) {
     kcal += s.kcal;
+    totalGrams += s.grams;
   }
 
+  const factor = totalGrams > 0 ? 100 / totalGrams : 1;
   return {
-    kcalPerServing: Math.round(kcal / servings),
-    proteinG: hasMacros ? Math.round(protein / servings) : null,
-    fatG: hasMacros ? Math.round(fat / servings) : null,
-    carbsG: hasMacros ? Math.round(carbs / servings) : null,
+    kcalPer100g: Math.round(kcal * factor),
+    proteinG: hasMacros ? Math.round(protein) : null,
+    fatG: hasMacros ? Math.round(fat) : null,
+    carbsG: hasMacros ? Math.round(carbs) : null,
   };
 }
 
@@ -336,11 +339,11 @@ function scoreTemplate(
 
   // Calculate nutrition
   const staples = template.stapleKeys.map(makeStapleIngredient);
-  const nutrition = calcNutrition(usedProducts, staples, preferences.servings);
+  const nutrition = calcNutrition(usedProducts, staples);
 
   // Score components
   const maxKcal = preferences.maxKcal;
-  const kcal = nutrition.kcalPerServing;
+  const kcal = nutrition.kcalPer100g;
 
   // 1. Calorie fit (0-40): full score if within 80% of budget, 0 if over
   let calorieFit: number;

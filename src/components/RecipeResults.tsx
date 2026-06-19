@@ -1,14 +1,17 @@
 import { useMemo, useEffect, useRef } from 'react';
-import type { SelectedProduct, RecipePreference } from '../types';
+import type { SelectedProduct, RecipePreference, RecipeRecommendation } from '../types';
 import { generateRecipes } from '../lib/recipeEngine';
 import RecipeCard from './RecipeCard';
 
 interface Props {
   items: SelectedProduct[];
   preferences: RecipePreference;
+  savedIds: Set<string>;
+  savedRecipes: RecipeRecommendation[];
+  onToggleSave: (recipe: RecipeRecommendation) => void;
 }
 
-export default function RecipeResults({ items, preferences }: Props) {
+export default function RecipeResults({ items, preferences, savedIds, savedRecipes, onToggleSave }: Props) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stablePrefsRef = useRef(preferences);
   const stableItemsRef = useRef(items);
@@ -54,20 +57,43 @@ export default function RecipeResults({ items, preferences }: Props) {
     return (
       <section className="recipe-results" aria-live="polite" aria-label="Recipe suggestions">
         <div className="recipe-empty recipe-warning">
-          No recipes found under {preferences.maxKcal} kcal with your current preferences — try raising the calorie limit or changing the meal type.
+          No recipes found under {preferences.maxKcal} kcal/100g with your current preferences — try raising the calorie limit or changing the meal type.
         </div>
       </section>
     );
   }
 
   return (
-    <section className="recipe-results" aria-live="polite" aria-label="Recipe suggestions">
-      <h2 className="recipe-results-heading">Recipe Suggestions</h2>
-      <div className="recipe-grid">
-        {result.recipes.map(recipe => (
-          <RecipeCard key={recipe.id} recipe={recipe} />
-        ))}
-      </div>
-    </section>
+    <>
+      <section className="recipe-results" aria-live="polite" aria-label="Recipe suggestions">
+        <h2 className="recipe-results-heading">Recipe Suggestions</h2>
+        <div className="recipe-grid">
+          {result.recipes.map(recipe => (
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              isSaved={savedIds.has(recipe.id)}
+              onToggleSave={onToggleSave}
+            />
+          ))}
+        </div>
+      </section>
+
+      {savedRecipes.length > 0 && (
+        <section className="recipe-results recipe-results-saved" aria-label="Saved recipes">
+          <h2 className="recipe-results-heading">Saved Recipes</h2>
+          <div className="recipe-grid">
+            {savedRecipes.map(recipe => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                isSaved={true}
+                onToggleSave={onToggleSave}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </>
   );
 }

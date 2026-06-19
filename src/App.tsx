@@ -1,76 +1,160 @@
-import { useRef, useState, useCallback } from 'react';
+import { useState, useReducer, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import SearchForm from './components/SearchForm';
 import SearchChips from './components/SearchChips';
 import SearchStatus from './components/SearchStatus';
 import ProductGrid from './components/ProductGrid';
 import EmptyState from './components/EmptyState';
-import type { SearchState, SearchResponse } from './types';
+import RecipeBasket from './components/RecipeBasket';
+import RecipeResults from './components/RecipeResults';
+import type {
+  SearchState,
+  SearchResponse,
+  ErrorType,
+  Product,
+  SelectedProduct,
+  RecipePreference,
+} from './types';
+import { loadBasket, saveBasket } from './lib/basketStorage';
 
-const INITIAL: SearchState = {
-  phase: 'idle',
-  results: [],
-  total: 0,
-  query: '',
-  errorType: null,
+// ─── Basket reducer ───────────────────────────────────────────────────────────
+
+const DEFAULT_PREFERENCES: RecipePreference = {
+  maxKcal: 450,
+  servings: 1,
+  mealType: 'any',
+  prepStyle: 'any',
 };
 
-export default function App() {
-  const [state, setState] = useState<SearchState>(INITIAL);
-  const abortRef = useRef<AbortController | null>(null);
-  const currentQueryRef = useRef('');
-  const lastQueryRef = useRef('');
+interface BasketState {
+  items: SelectedProduct[];
+  preferences: RecipePreference;
+}
 
-  const search = useCallback(async (q: string) => {
-    q = q.trim();
-    if (!q) {
-      setState(INITIAL);
-      return;
+type BasketAction =
+  | { type: 'ADD'; product: Product }
+  | { type: 'REMOVE'; code: string }
+  | { type: 'SET_GRAMS'; code: string; grams: number }
+  | { type: 'CLEAR' }
+  | { type: 'SET_PREFERENCES'; prefs: RecipePreference };
+
+function basketReducer(state: BasketState, action: BasketAction): BasketState {
+  switch (action.type) {
+    case 'ADD': {
+      if (state.items.some(i => i.product.code === action.product.code)) return state;
+      return { ...state, items: [...state.items, { product: action.product, grams: 100 }] };
     }
+    case 'REMOVE':
+      return { ...state, items: state.items.filter(i => i.product.code !== action.code) };
+    case 'SET_GRAMS':
+      return {
+        ...state,
+        items: state.items.map(i =>
+          i.product.code === action.code ? { ...i, grams: action.grams } : i,
+        ),
+      };
+    case 'CLEAR':
+      return { ...state, items: [] };
+    case 'SET_PREFERENCES':
+      return { ...state, preferences: action.prefs };
+    default:
+      return state;
+  }
+}
 
-    currentQueryRef.current = q;
-    lastQueryRef.current = q;
+// ─── Error type derivation ────────────────────────────────────────────────────
 
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    const { signal } = abortRef.current;
+function getErrorType(error: Error | null): ErrorType | null {
+  if (!error) return null;
+  const e = error as Error & { status?: number };
+  if (e.status === 429) return 'rate-limited';
+  if (e.status && e.status >= 400) return 'provider-unavailable';
+  if (error.message === 'rate-limited') return 'rate-limited';
+  if (error.message === 'provider-unavailable') return 'provider-unavailable';
+  return 'network';
+}
 
-    setState(s => ({ ...s, phase: 'loading', query: q, results: [], errorType: null }));
+// ─── App ──────────────────────────────────────────────────────────────────────
 
-    try {
+const stored = loadBasket();
+
+export default function App() {
+  const [submittedQuery, setSubmittedQuery] = useState('');
+
+  const [basket, dispatch] = useReducer(basketReducer, {
+    items: stored?.items ?? [],
+    preferences: stored?.preferences ?? DEFAULT_PREFERENCES,
+  });
+
+  // Persist basket to localStorage on every change
+  useEffect(() => {
+    saveBasket(basket.items, basket.preferences);
+  }, [basket.items, basket.preferences]);
+
+  // ── Search query ─────────────────────────────────────────────────────────────
+  const { data, isLoading, isError, error, refetch } = useQuery<SearchResponse, Error>({
+    queryKey: ['search', submittedQuery],
+    queryFn: async ({ signal }) => {
       const url = new URL('/api/search', window.location.origin);
-      url.searchParams.set('q', q);
+      url.searchParams.set('q', submittedQuery);
       const res = await fetch(url, { signal });
-
-      if (signal.aborted || q !== currentQueryRef.current) return;
-
       if (res.status === 429) {
-        setState(s => ({ ...s, phase: 'error', errorType: 'rate-limited' }));
-        return;
+        const err = new Error('rate-limited') as Error & { status: number };
+        err.status = 429;
+        throw err;
       }
       if (!res.ok) {
-        setState(s => ({ ...s, phase: 'error', errorType: 'provider-unavailable' }));
-        return;
+        const err = new Error('provider-unavailable') as Error & { status: number };
+        err.status = res.status;
+        throw err;
       }
+      return res.json() as Promise<SearchResponse>;
+    },
+    enabled: submittedQuery.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
 
-      const data: SearchResponse = await res.json() as SearchResponse;
-      if (signal.aborted || q !== currentQueryRef.current) return;
+  const searchState: SearchState = {
+    phase: !submittedQuery
+      ? 'idle'
+      : isLoading
+        ? 'loading'
+        : isError
+          ? 'error'
+          : !data?.results?.length
+            ? 'empty'
+            : 'success',
+    results: data?.results ?? [],
+    total: data?.total ?? 0,
+    query: submittedQuery,
+    errorType: isError ? getErrorType(error) : null,
+  };
 
-      setState({
-        phase: data.results.length === 0 ? 'empty' : 'success',
-        results: data.results,
-        total: data.total,
-        query: q,
-        errorType: null,
-      });
-    } catch {
-      if (signal.aborted || q !== currentQueryRef.current) return;
-      setState(s => ({ ...s, phase: 'error', errorType: 'network' }));
-    }
+  const retry = useCallback(() => void refetch(), [refetch]);
+
+  // ── Basket callbacks ──────────────────────────────────────────────────────────
+  const handleAddToBasket = useCallback((product: Product) => {
+    dispatch({ type: 'ADD', product });
   }, []);
 
-  const retry = useCallback(() => {
-    if (lastQueryRef.current) void search(lastQueryRef.current);
-  }, [search]);
+  const handleSetGrams = useCallback((code: string, grams: number) => {
+    dispatch({ type: 'SET_GRAMS', code, grams });
+  }, []);
+
+  const handleRemove = useCallback((code: string) => {
+    dispatch({ type: 'REMOVE', code });
+  }, []);
+
+  const handleClear = useCallback(() => {
+    dispatch({ type: 'CLEAR' });
+  }, []);
+
+  const handlePreferencesChange = useCallback((prefs: RecipePreference) => {
+    dispatch({ type: 'SET_PREFERENCES', prefs });
+  }, []);
+
+  const basketCodes = new Set(basket.items.map(i => i.product.code));
 
   return (
     <>
@@ -78,24 +162,43 @@ export default function App() {
         <h1>Calorie Search</h1>
         <p>Find the lowest-calorie products for any food — sorted by kcal per 100g · Australia &amp; New Zealand</p>
         <p className="free-note">Free to use — no account needed.</p>
-        <SearchForm onSearch={search} disabled={state.phase === 'loading'} />
-        {state.phase === 'idle' && <SearchChips onSearch={search} />}
+        <SearchForm onSearch={setSubmittedQuery} disabled={isLoading} />
+        {searchState.phase === 'idle' && <SearchChips onSearch={setSubmittedQuery} />}
       </header>
-      <main>
-        <div
-          className="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <SearchStatus state={state} onRetry={retry} />
+
+      <div className="app-layout">
+        {/* Left: search results */}
+        <main>
+          <div className="status" aria-live="polite" aria-atomic="true">
+            <SearchStatus state={searchState} onRetry={retry} />
+          </div>
+          {searchState.phase === 'success' && (
+            <ProductGrid
+              results={searchState.results}
+              total={searchState.total}
+              query={searchState.query}
+              basketCodes={basketCodes}
+              onAddToBasket={handleAddToBasket}
+            />
+          )}
+          {(searchState.phase === 'idle' || searchState.phase === 'empty') && (
+            <EmptyState phase={searchState.phase} query={searchState.query} />
+          )}
+        </main>
+
+        {/* Right: basket + recipe suggestions */}
+        <div className="basket-column">
+          <RecipeBasket
+            items={basket.items}
+            preferences={basket.preferences}
+            onSetGrams={handleSetGrams}
+            onRemove={handleRemove}
+            onClear={handleClear}
+            onPreferencesChange={handlePreferencesChange}
+          />
+          <RecipeResults items={basket.items} preferences={basket.preferences} />
         </div>
-        {state.phase === 'success' && (
-          <ProductGrid results={state.results} total={state.total} query={state.query} />
-        )}
-        {(state.phase === 'idle' || state.phase === 'empty') && (
-          <EmptyState phase={state.phase} query={state.query} />
-        )}
-      </main>
+      </div>
     </>
   );
 }

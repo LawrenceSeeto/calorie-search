@@ -13,6 +13,8 @@ type RawProduct = {
   quantity?: unknown;
   serving_size?: unknown;
   countries_tags?: unknown;
+  image_front_url?: unknown;
+  image_url?: unknown;
 };
 
 export function normalizeKcal(nutriments: Nutriments): number | null {
@@ -27,6 +29,14 @@ function normalizeMacro(val: unknown): number | null {
   return typeof val === 'number' && isFinite(val)
     ? Math.round(val * 10) / 10
     : null;
+}
+
+function parseServingGrams(serving: unknown): number | null {
+  if (typeof serving !== 'string') return null;
+  const match = /(\d+(?:\.\d+)?)\s*g/i.exec(serving);
+  if (!match) return null;
+  const val = parseFloat(match[1]);
+  return isFinite(val) && val > 0 ? Math.round(val) : null;
 }
 
 export function dedupeByCode(products: RawProduct[]): RawProduct[] {
@@ -44,8 +54,16 @@ export function normalizeProduct(p: RawProduct): Product | null {
   const kcalPer100g = normalizeKcal(n);
   if (kcalPer100g === null) return null;
 
+  const code = String(p.code ?? '');
+  const imageUrl =
+    typeof p.image_front_url === 'string' && p.image_front_url
+      ? p.image_front_url
+      : typeof p.image_url === 'string' && p.image_url
+        ? p.image_url
+        : null;
+
   return {
-    code: String(p.code ?? ''),
+    code,
     name: String(p.product_name ?? 'Unknown product'),
     brand: String(p.brands ?? ''),
     kcalPer100g: Math.round(kcalPer100g),
@@ -54,9 +72,12 @@ export function normalizeProduct(p: RawProduct): Product | null {
     carbsPer100g:   normalizeMacro(n['carbohydrates_100g']),
     quantity: typeof p.quantity === 'string' ? p.quantity : null,
     servingSize: typeof p.serving_size === 'string' ? p.serving_size : null,
+    servingGrams: parseServingGrams(p.serving_size),
     countries: Array.isArray(p.countries_tags) ? p.countries_tags.map(String) : [],
     colesUrl: `https://www.coles.com.au/search?q=${encodeURIComponent(String(p.code || p.product_name || ''))}`,
     woolworthsUrl: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(String(p.code || p.product_name || ''))}`,
+    imageUrl,
+    sourceUrl: code ? `https://world.openfoodfacts.org/product/${code}` : '',
   };
 }
 
@@ -64,7 +85,10 @@ function buildUrl(q: string, country: string): string {
   const url = new URL(OFN_SEARCH_URL);
   url.searchParams.set('q', q);
   url.searchParams.set('countries_tags', `en:${country}`);
-  url.searchParams.set('fields', 'code,product_name,brands,nutriments,quantity,serving_size,countries_tags');
+  url.searchParams.set(
+    'fields',
+    'code,product_name,brands,nutriments,quantity,serving_size,countries_tags,image_front_url,image_url',
+  );
   url.searchParams.set('page_size', '60');
   return url.toString();
 }

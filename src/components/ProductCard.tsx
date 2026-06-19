@@ -1,7 +1,10 @@
+import { Plus, Check } from 'lucide-react';
 import type { Product } from '../types';
 
 interface Props {
   product: Product;
+  inBasket: boolean;
+  onAdd: (product: Product) => void;
 }
 
 function calClass(kcal: number): string {
@@ -10,7 +13,7 @@ function calClass(kcal: number): string {
   return 'cal-high';
 }
 
-export default function ProductCard({ product }: Props) {
+export default function ProductCard({ product, inBasket, onAdd }: Props) {
   return (
     <li className="product-row">
       <div className="product-info">
@@ -35,6 +38,16 @@ export default function ProductCard({ product }: Props) {
           <span className="macro-pill macro-carbs">{product.carbsPer100g}g carbs</span>
         )}
       </div>
+      <button
+        type="button"
+        className={`add-btn${inBasket ? ' add-btn-in-basket' : ''}`}
+        onClick={() => { if (!inBasket) onAdd(product); }}
+        aria-label={inBasket ? `${product.name} is in your basket` : `Add ${product.name} to basket`}
+        aria-pressed={inBasket}
+      >
+        {inBasket ? <Check size={14} /> : <Plus size={14} />}
+        {inBasket ? 'In Basket' : 'Add'}
+      </button>
     </li>
   );
 }

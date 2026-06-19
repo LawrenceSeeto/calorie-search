@@ -8,9 +8,12 @@ export interface Product {
   carbsPer100g: number | null;
   quantity: string | null;
   servingSize: string | null;
+  servingGrams: number | null;
   countries: string[];
   colesUrl: string;
   woolworthsUrl: string;
+  imageUrl: string | null;
+  sourceUrl: string;
 }
 
 export interface SearchResponse {
@@ -29,3 +32,47 @@ export interface SearchState {
   query: string;
   errorType: ErrorType | null;
 }
+
+export interface SelectedProduct {
+  product: Product;
+  grams: number;
+}
+
+export type MealType = 'any' | 'breakfast' | 'lunch-dinner' | 'snack';
+export type PrepStyle = 'any' | 'no-cook' | 'quick' | 'cooked';
+
+export interface RecipePreference {
+  maxKcal: number;
+  servings: number;
+  mealType: MealType;
+  prepStyle: PrepStyle;
+}
+
+export interface RecipeIngredient {
+  name: string;
+  grams: number;
+  kcal: number;
+  isStaple: boolean;
+}
+
+export interface NutritionEstimate {
+  kcalPerServing: number;
+  proteinG: number | null;
+  fatG: number | null;
+  carbsG: number | null;
+}
+
+export interface RecipeRecommendation {
+  id: string;
+  title: string;
+  templateId: string;
+  nutrition: NutritionEstimate;
+  usedProducts: SelectedProduct[];
+  staples: RecipeIngredient[];
+  steps: string[];
+  prepTimeBand: 'no-cook' | 'quick' | 'cooked';
+  mealTypes: MealType[];
+  whyRecommended: string;
+}
+
+export type RecipeWarning = 'insufficient-data' | 'no-templates-match';

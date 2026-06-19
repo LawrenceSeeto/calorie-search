@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -20,6 +20,12 @@ function localApi(): Plugin {
   return {
     name: 'local-api',
     configureServer(server) {
+      // Inject .env.local vars into process.env so SSR modules can read them
+      const env = loadEnv(server.config.mode, server.config.root, '');
+      for (const [k, v] of Object.entries(env)) {
+        if (!(k in process.env)) process.env[k] = v;
+      }
+
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const url = req.url ?? '/';
         if (!url.startsWith('/api/')) return next();

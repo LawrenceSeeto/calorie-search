@@ -155,15 +155,20 @@ main {
   margin-top: 2px;
 }
 
-.source-link {
+.retailer-links {
+  display: flex;
+  gap: 8px;
+}
+
+.retailer-link {
   font-size: 0.8rem;
   color: #22c55e;
   white-space: nowrap;
   text-decoration: none;
 }
 
-.source-link:hover { text-decoration: underline; }
-.source-link:focus-visible { outline: 2px solid #22c55e; outline-offset: 2px; border-radius: 3px; }
+.retailer-link:hover { text-decoration: underline; }
+.retailer-link:focus-visible { outline: 2px solid #22c55e; outline-offset: 2px; border-radius: 3px; }
 
 .macro-pills {
   display: flex;

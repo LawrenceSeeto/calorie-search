@@ -17,14 +17,10 @@ export default function ProductCard({ product }: Props) {
         <span className="product-name">{product.name}</span>
         {product.brand && <span className="product-brand">{product.brand}</span>}
       </div>
-      <a
-        className="source-link"
-        href={product.sourceUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Source ↗
-      </a>
+      <div className="retailer-links">
+        <a className="retailer-link" href={product.colesUrl} target="_blank" rel="noopener noreferrer">Coles ↗</a>
+        <a className="retailer-link" href={product.woolworthsUrl} target="_blank" rel="noopener noreferrer">Woolworths ↗</a>
+      </div>
       <div className="macro-pills">
         <span className={`macro-pill ${calClass(product.kcalPer100g)}`}>
           {product.kcalPer100g} kcal

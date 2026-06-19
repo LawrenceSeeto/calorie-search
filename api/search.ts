@@ -55,7 +55,8 @@ export function normalizeProduct(p: RawProduct): Product | null {
     quantity: typeof p.quantity === 'string' ? p.quantity : null,
     servingSize: typeof p.serving_size === 'string' ? p.serving_size : null,
     countries: Array.isArray(p.countries_tags) ? p.countries_tags.map(String) : [],
-    sourceUrl: `https://world.openfoodfacts.org/product/${p.code ?? ''}`,
+    colesUrl: `https://www.coles.com.au/search?q=${encodeURIComponent(String(p.code || p.product_name || ''))}`,
+    woolworthsUrl: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(String(p.code || p.product_name || ''))}`,
   };
 }
 

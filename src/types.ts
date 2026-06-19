@@ -9,7 +9,8 @@ export interface Product {
   quantity: string | null;
   servingSize: string | null;
   countries: string[];
-  sourceUrl: string;
+  colesUrl: string;
+  woolworthsUrl: string;
 }
 
 export interface SearchResponse {

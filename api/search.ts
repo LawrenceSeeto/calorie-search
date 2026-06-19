@@ -11,6 +11,7 @@ type RawProduct = {
   brands?: unknown;
   nutriments?: Nutriments;
   image_front_small_url?: unknown;
+  image_front_url?: unknown;
   quantity?: unknown;
   serving_size?: unknown;
   countries_tags?: unknown;
@@ -42,7 +43,10 @@ export function normalizeProduct(p: RawProduct): Product | null {
     code: String(p.code ?? ''),
     name: String(p.product_name ?? 'Unknown product'),
     brand: String(p.brands ?? ''),
-    imageUrl: typeof p.image_front_small_url === 'string' ? p.image_front_small_url : null,
+    imageUrl:
+      typeof p.image_front_small_url === 'string' ? p.image_front_small_url :
+      typeof p.image_front_url === 'string'        ? p.image_front_url :
+      null,
     kcalPer100g: Math.round(kcalPer100g),
     quantity: typeof p.quantity === 'string' ? p.quantity : null,
     servingSize: typeof p.serving_size === 'string' ? p.serving_size : null,
@@ -55,7 +59,7 @@ function buildUrl(q: string, country: string): string {
   const url = new URL(OFN_SEARCH_URL);
   url.searchParams.set('q', q);
   url.searchParams.set('countries_tags', `en:${country}`);
-  url.searchParams.set('fields', 'code,product_name,brands,nutriments,image_front_small_url,quantity,serving_size,countries_tags');
+  url.searchParams.set('fields', 'code,product_name,brands,nutriments,image_front_small_url,image_front_url,quantity,serving_size,countries_tags');
   url.searchParams.set('page_size', '60');
   return url.toString();
 }

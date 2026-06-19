@@ -1,7 +1,8 @@
 {
   "devCommand": "vite",
   "functions": {
-    "api/search.ts": { "maxDuration": 15 }
+    "api/search.ts": { "maxDuration": 15 },
+    "api/recipe.ts": { "maxDuration": 30 }
   },
   "headers": [
     {

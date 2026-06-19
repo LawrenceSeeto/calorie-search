@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import type { SelectedProduct, RecipePreference, RecipeRecommendation } from '../types';
 import { generateRecipes } from '../lib/recipeEngine';
 import RecipeCard from './RecipeCard';
@@ -10,6 +10,8 @@ interface Props {
   savedRecipes: RecipeRecommendation[];
   onToggleSave: (recipe: RecipeRecommendation) => void;
 }
+
+type AiState = 'idle' | 'loading' | 'error' | 'success';
 
 export default function RecipeResults({ items, preferences, savedIds, savedRecipes, onToggleSave }: Props) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,6 +34,48 @@ export default function RecipeResults({ items, preferences, savedIds, savedRecip
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  // ── AI generation ─────────────────────────────────────────────────────────────
+  const [aiState, setAiState] = useState<AiState>('idle');
+  const [aiRecipes, setAiRecipes] = useState<RecipeRecommendation[]>([]);
+
+  // Reset AI results when basket changes
+  useEffect(() => {
+    setAiState('idle');
+    setAiRecipes([]);
+  }, [items.length]);
+
+  const generateWithAI = useCallback(async () => {
+    setAiState('loading');
+    try {
+      const res = await fetch('/api/recipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          basket: items.map(i => ({
+            code: i.product.code,
+            name: i.product.name,
+            brand: i.product.brand,
+            grams: i.grams,
+            kcalPer100g: i.product.kcalPer100g,
+            proteinPer100g: i.product.proteinPer100g,
+            fatPer100g: i.product.fatPer100g,
+            carbsPer100g: i.product.carbsPer100g,
+          })),
+          preferences,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? 'api-error');
+      }
+      const data = await res.json() as { recipes: RecipeRecommendation[] };
+      setAiRecipes(data.recipes);
+      setAiState('success');
+    } catch {
+      setAiState('error');
+    }
+  }, [items, preferences]);
 
   if (items.length === 0) {
     return (
@@ -77,7 +121,37 @@ export default function RecipeResults({ items, preferences, savedIds, savedRecip
             />
           ))}
         </div>
+
+        <div className="ai-generate-row">
+          <button
+            type="button"
+            className="ai-generate-btn"
+            onClick={generateWithAI}
+            disabled={aiState === 'loading'}
+          >
+            {aiState === 'loading' ? 'Generating…' : '✨ Generate with AI'}
+          </button>
+          {aiState === 'error' && (
+            <span className="ai-error">Could not generate — check your API key is configured.</span>
+          )}
+        </div>
       </section>
+
+      {aiState === 'success' && aiRecipes.length > 0 && (
+        <section className="recipe-results recipe-results-ai" aria-live="polite" aria-label="AI recipe ideas">
+          <h2 className="recipe-results-heading">AI Recipe Ideas ✨</h2>
+          <div className="recipe-grid">
+            {aiRecipes.map(recipe => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                isSaved={savedIds.has(recipe.id)}
+                onToggleSave={onToggleSave}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {savedRecipes.length > 0 && (
         <section className="recipe-results recipe-results-saved" aria-label="Saved recipes">

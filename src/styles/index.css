@@ -663,6 +663,46 @@ main {
   border-top: 1px solid #e5e5e5;
 }
 
+.recipe-results-ai {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px solid #6366f1;
+}
+
+.ai-generate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.ai-generate-btn {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.ai-generate-btn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.ai-generate-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ai-error {
+  font-size: 0.8rem;
+  color: #dc2626;
+}
+
 .recipe-grid {
   display: flex;
   flex-direction: column;

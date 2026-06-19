@@ -4,6 +4,18 @@ import type { Plugin } from 'vite';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', chunk => { raw += String(chunk); });
+    req.on('end', () => {
+      try { resolve(raw ? JSON.parse(raw) : undefined); }
+      catch { resolve(undefined); }
+    });
+    req.on('error', reject);
+  });
+}
+
 function localApi(): Plugin {
   return {
     name: 'local-api',
@@ -16,7 +28,8 @@ function localApi(): Plugin {
         const query: Record<string, string> = {};
         parsed.searchParams.forEach((val, key) => { query[key] = val; });
 
-        const vReq = Object.assign(req, { query, cookies: {}, body: undefined }) as unknown as VercelRequest;
+        const body = req.method === 'POST' ? await readJsonBody(req) : undefined;
+        const vReq = Object.assign(req, { query, cookies: {}, body }) as unknown as VercelRequest;
 
         let resolved = false;
         const vRes = new Proxy(res as unknown as VercelResponse, {
@@ -43,7 +56,8 @@ function localApi(): Plugin {
         });
 
         try {
-          const mod = await server.ssrLoadModule('/api/search.ts');
+          const apiSegment = parsed.pathname.replace(/^\/api\//, '');
+          const mod = await server.ssrLoadModule(`/api/${apiSegment}.ts`);
           await (mod.default as (req: VercelRequest, res: VercelResponse) => Promise<void>)(vReq, vRes);
         } catch (err) {
           if (!resolved) {

@@ -38,15 +38,18 @@ export default function RecipeResults({ items, preferences, savedIds, savedRecip
   // ── AI generation ─────────────────────────────────────────────────────────────
   const [aiState, setAiState] = useState<AiState>('idle');
   const [aiRecipes, setAiRecipes] = useState<RecipeRecommendation[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Reset AI results when basket changes
   useEffect(() => {
     setAiState('idle');
     setAiRecipes([]);
+    setAiError(null);
   }, [items.length]);
 
   const generateWithAI = useCallback(async () => {
     setAiState('loading');
+    setAiError(null);
     try {
       const res = await fetch('/api/recipe', {
         method: 'POST',
@@ -66,13 +69,14 @@ export default function RecipeResults({ items, preferences, savedIds, savedRecip
         }),
       });
       if (!res.ok) {
-        const err = await res.json() as { error?: string };
-        throw new Error(err.error ?? 'api-error');
+        const errBody = await res.json() as { error?: string };
+        throw new Error(errBody.error ?? 'AI generation failed');
       }
       const data = await res.json() as { recipes: RecipeRecommendation[] };
       setAiRecipes(data.recipes);
       setAiState('success');
-    } catch {
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'AI generation failed');
       setAiState('error');
     }
   }, [items, preferences]);
@@ -132,7 +136,7 @@ export default function RecipeResults({ items, preferences, savedIds, savedRecip
             {aiState === 'loading' ? 'Generating…' : '✨ Generate with AI'}
           </button>
           {aiState === 'error' && (
-            <span className="ai-error">Could not generate — check your API key is configured.</span>
+            <span className="ai-error">{aiError ?? 'Could not generate — check your API key is configured.'}</span>
           )}
         </div>
       </section>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie Search — Find the Lowest Calorie Products</title>
+  <title>Calorie Search AU/NZ — Find the Lowest Calorie Products</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -232,18 +232,19 @@
 
 <header>
   <h1>Calorie Search</h1>
-  <p>Find the lowest-calorie products for any food — sorted by kcal per 100g</p>
+  <p>Find the lowest-calorie products for any food — sorted by kcal per 100g · Australia &amp; New Zealand</p>
+  <p style="color:#aaa;font-size:0.8rem;margin-top:4px">Free to use — no account needed.</p>
   <div class="search-bar">
     <label for="q" class="visually-hidden">Search for a food</label>
-    <input id="q" type="search" placeholder="e.g. yogurt, chips, protein bar…" autocomplete="off" />
+    <input id="q" type="search" placeholder="e.g. Tim Tams, Vegemite, Weet-Bix, Milo…" autocomplete="off" />
     <button id="btn">Search</button>
   </div>
   <div class="chips" id="chips">
-    <button class="chip" data-q="yogurt">yogurt</button>
-    <button class="chip" data-q="chips">chips</button>
-    <button class="chip" data-q="cereal">cereal</button>
-    <button class="chip" data-q="protein bar">protein bar</button>
-    <button class="chip" data-q="bread">bread</button>
+    <button class="chip" data-q="tim tams">tim tams</button>
+    <button class="chip" data-q="vegemite">vegemite</button>
+    <button class="chip" data-q="weet-bix">weet-bix</button>
+    <button class="chip" data-q="milo">milo</button>
+    <button class="chip" data-q="shapes">shapes</button>
   </div>
 </header>
 
@@ -348,19 +349,33 @@
 
     const url = new URL('https://world.openfoodfacts.org/api/v2/search');
     url.searchParams.set('q', q);
-    url.searchParams.set('fields', 'product_name,brands,nutriments,image_front_small_url');
+    url.searchParams.set('fields', 'product_name,brands,nutriments,image_front_small_url,code');
     url.searchParams.set('page_size', '60');
 
+    const urlAU = new URL(url); urlAU.searchParams.set('countries_tags', 'en:australia');
+    const urlNZ = new URL(url); urlNZ.searchParams.set('countries_tags', 'en:new-zealand');
+
     try {
-      const res = await fetch(url, { signal });
+      const [resAU, resNZ] = await Promise.all([
+        fetch(urlAU, { signal }),
+        fetch(urlNZ, { signal })
+      ]);
 
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!resAU.ok || !resNZ.ok) throw new Error(`API error`);
 
-      const data = await res.json();
+      const [dataAU, dataNZ] = await Promise.all([resAU.json(), resNZ.json()]);
 
       if (q !== currentQuery) return;
 
-      const products = (data.products || [])
+      const seen = new Set();
+      const allProducts = [...(dataAU.products || []), ...(dataNZ.products || [])].filter(p => {
+        const key = p.code || `${p.product_name}|${p.brands}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      const products = allProducts
         .filter(p => p.nutriments && typeof p.nutriments['energy-kcal_100g'] === 'number')
         .sort((a, b) => a.nutriments['energy-kcal_100g'] - b.nutriments['energy-kcal_100g'])
         .slice(0, 20);

@@ -87,10 +87,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           system_instruction: {
             parts: [{ text: SYSTEM_PROMPT }],
@@ -99,17 +102,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { role: 'user', parts: [{ text: buildUserPrompt(body.basket, body.preferences) }] },
           ],
           generationConfig: {
+            responseMimeType: 'application/json',
             temperature: 0.8,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 8192,
           },
         }),
       },
     );
 
     if (!geminiRes.ok) {
-      const err = await geminiRes.text();
-      console.error('[recipe] Gemini error:', err);
-      return res.status(502).json({ error: 'AI generation failed' });
+      const errJson = await geminiRes.json().catch(() => null) as { error?: { message?: string } } | null;
+      const geminiMsg = errJson?.error?.message ?? `HTTP ${geminiRes.status}`;
+      console.error('[recipe] Gemini error:', geminiMsg);
+      return res.status(502).json({ error: geminiMsg });
     }
 
     const geminiData = await geminiRes.json() as {
@@ -118,8 +123,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
 
-    // Gemini may wrap output in a markdown code fence — strip it
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    function extractJSONArray(s: string): string {
+      const fenceMatch = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (fenceMatch) return fenceMatch[1].trim();
+      const start = s.indexOf('[');
+      const end = s.lastIndexOf(']');
+      if (start !== -1 && end > start) return s.slice(start, end + 1);
+      return s.trim();
+    }
+    const cleaned = extractJSONArray(raw);
 
     let aiRecipes: AiRecipe[];
     try {

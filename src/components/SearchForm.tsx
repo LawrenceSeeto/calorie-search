@@ -1,9 +1,10 @@
 interface Props {
   onSearch: (q: string) => void;
+  onQueryChange?: (q: string) => void;
   disabled: boolean;
 }
 
-export default function SearchForm({ onSearch, disabled }: Props) {
+export default function SearchForm({ onSearch, onQueryChange, disabled }: Props) {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -20,7 +21,7 @@ export default function SearchForm({ onSearch, disabled }: Props) {
         type="search"
         placeholder="e.g. Tim Tams, Vegemite, Weet-Bix, Milo…"
         autoComplete="off"
-        disabled={disabled}
+        onChange={e => onQueryChange?.(e.currentTarget.value)}
       />
       <button type="submit" disabled={disabled}>
         Search

@@ -149,7 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .filter(r => r.title && Array.isArray(r.steps) && r.steps.length > 0)
       .map((r): RecipeRecommendation => {
         const usedProducts: SelectedProduct[] = (r.usedProductCodes ?? [])
-          .map(code => {
+          .map((code): SelectedProduct | null => {
             const b = basketByCode.get(code);
             if (!b) return null;
             return {
@@ -167,7 +167,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 countries: [],
                 colesUrl: '',
                 woolworthsUrl: '',
-                imageUrl: null,
+                aldiUrl: null,
+                igaUrl: null,
+                costcoUrl: null,
                 sourceUrl: b.code ? `https://world.openfoodfacts.org/product/${b.code}` : '',
               },
               grams: b.grams,
@@ -176,14 +178,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .filter((sp): sp is SelectedProduct => sp !== null);
 
         // Fall back to all basket items if no codes matched
-        const finalProducts = usedProducts.length > 0 ? usedProducts : body.basket.map(b => ({
+        const finalProducts: SelectedProduct[] = usedProducts.length > 0 ? usedProducts : body.basket.map((b): SelectedProduct => ({
           product: {
             code: b.code, name: b.name, brand: b.brand,
             kcalPer100g: b.kcalPer100g, proteinPer100g: b.proteinPer100g,
             fatPer100g: b.fatPer100g, carbsPer100g: b.carbsPer100g,
             quantity: null, servingSize: null, servingGrams: null,
             countries: [], colesUrl: '', woolworthsUrl: '',
-            imageUrl: null, sourceUrl: '',
+            aldiUrl: null, igaUrl: null, costcoUrl: null,
+            sourceUrl: '',
           },
           grams: b.grams,
         } satisfies SelectedProduct));

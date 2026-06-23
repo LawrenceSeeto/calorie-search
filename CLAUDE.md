@@ -18,18 +18,42 @@ api/__tests__ Vitest unit tests
 
 1. User submits a query → `useCallback` in `App.tsx` fires `search(q)` (debounced 400ms on input, immediate on Enter/button/chip)
 2. `App.tsx` calls `GET /api/search?q=<term>` with an `AbortController` signal and `currentQueryRef` race guard
-3. `/api/search` fires **two parallel fetches** to `https://search.openfoodfacts.org/search` — one per country (AU, NZ) — merges + deduplicates on `code`, normalises to the `Product` schema, sorts ascending by `kcalPer100g`, and returns paginated JSON
+3. `/api/search` fires **5 parallel store-based fetches** to `world.openfoodfacts.org/cgi/search.pl` — one per AU supermarket (Woolworths, Coles, ALDI, IGA, Costco) — merges store memberships via `dedupeAndMergeStores`, normalises to the `Product` schema, sorts by relevance score then ascending `kcalPer100g`, and returns paginated JSON. Only products found in at least one major AU supermarket are returned.
 4. Frontend renders `ProductGrid` (success), `EmptyState` (idle/empty), or `SearchStatus` error block
 
 ### Why a backend proxy
 
-The `search.openfoodfacts.org/search` endpoint (search-a-licious) lacks CORS headers, so it cannot be called from the browser. The v2 API at `world.openfoodfacts.org` was returning 503s. The proxy at `/api/search` solves both issues and adds `Cache-Control: s-maxage=300, stale-while-revalidate=60`.
+The `search.openfoodfacts.org/search` endpoint (search-a-licious) lacks CORS headers so it cannot be called from the browser. The primary endpoint is now `world.openfoodfacts.org/cgi/search.pl` (v2 API) with search-a-licious as a fallback. The proxy at `/api/search` solves CORS for both and adds `Cache-Control: s-maxage=300, stale-while-revalidate=60`.
 
 ### Normalization (`api/search.ts`)
 
 - `normalizeKcal()` — uses `energy-kcal_100g` directly; falls back to `energy_100g` (kJ) ÷ 4.184
-- `dedupeByCode()` — deduplicates by `code` (barcode), falls back to `product_name|brands`
-- `normalizeProduct()` — returns `null` for products with no calorie data (filtered out before sorting)
+- `dedupeByCode()` — deduplicates by `product_name|brands` (primary), falls back to barcode (still used in tests)
+- `dedupeAndMergeStores()` — deduplicates across 5 store queries, accumulating store labels from all occurrences of the same product
+- `normalizeProduct()` — returns `null` for products with no calorie data; sets retailer URLs from `stores_tags`
+- `scoreProduct()` — relevance score used as primary sort key (exact name match > prefix > contains)
+- `addValidatedWoolworthsLinks()` — upgrades Woolworths URL from search URL to direct product URL via live catalog lookup when barcode matches and `IsAvailable === true`
+
+### Fetch strategy with fallbacks (`api/search.ts`)
+
+1. **Primary**: 5 parallel store queries to `world.openfoodfacts.org/cgi/search.pl` with `stores_tags=<store>` + 4s timeout per query
+2. **If some queries fail**: supplements with a tagged AU fallback fetch that returns `stores_tags` in the response
+3. **If all 5 fail**: falls back to `search.openfoodfacts.org/search` + per-product hydration (up to 50 products) to recover store tags
+4. **429 on any query**: return 429 immediately; partial 5xx → continue with successful results
+
+### Retailer links
+
+All 5 retailers are populated from `stores_tags` (crowdsourced OFN data) and point to search URLs:
+- **Woolworths**: search URL set during normalization; `addValidatedWoolworthsLinks()` upgrades to a direct product URL when the live catalog confirms availability
+- **Coles**: `https://www.coles.com.au/search?q=<term>`
+- **ALDI**: `https://www.aldi.com.au/en/groceries/search/?q=<term>`
+- **IGA**: `https://www.iga.com.au/?post_type=product&s=<term>`
+- **Costco**: `https://www.costco.com.au/c/search?query=<term>`
+
+### Recipe engine
+
+- `api/recipe.ts` — Vercel serverless route that accepts a `Product[]` and generates a recipe via Google Gemini (free tier). Robust JSON parsing handles markdown-fenced responses.
+- `src/lib/recipeEngine.ts` — 22 template-based recipes; used as a fallback or local generation path.
 
 ### Race-condition guard
 
@@ -40,7 +64,9 @@ The `search.openfoodfacts.org/search` endpoint (search-a-licious) lacks CORS hea
 ```ts
 interface Product {
   code, name, brand, imageUrl, kcalPer100g,
-  quantity, servingSize, countries, sourceUrl
+  proteinPer100g, fatPer100g, carbsPer100g,
+  quantity, servingSize, servingGrams, countries,
+  colesUrl, woolworthsUrl, aldiUrl, igaUrl, costcoUrl, sourceUrl
 }
 interface SearchResponse { results, total, page, pageSize }
 ```

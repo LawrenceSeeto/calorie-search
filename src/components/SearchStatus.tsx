@@ -12,10 +12,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default function SearchStatus({ state, onRetry }: Props) {
-  if (state.phase === 'loading') {
-    return <div className="spinner" role="status" aria-label="Searching…" />;
-  }
-
   if (state.phase === 'error') {
     const msg = ERROR_MESSAGES[state.errorType ?? 'network'];
     return (

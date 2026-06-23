@@ -28,7 +28,9 @@ function mockProduct(overrides: Partial<{
     countries: [],
     colesUrl: '',
     woolworthsUrl: '',
-    imageUrl: null,
+    aldiUrl: null,
+    igaUrl: null,
+    costcoUrl: null,
     sourceUrl: '',
   };
 }

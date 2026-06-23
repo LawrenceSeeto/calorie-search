@@ -657,7 +657,7 @@ export function generateRecipes(
   const top = candidates.slice(0, 5);
   const recipes: RecipeRecommendation[] = top.map((c, idx) => {
     const stapleIngredients = c.template.stapleKeys.map(makeStapleIngredient);
-    const nutrition = calcNutrition(c.usedProducts, stapleIngredients, preferences.servings);
+    const nutrition = calcNutrition(c.usedProducts, stapleIngredients);
     const productNames = c.usedProducts.map(sp => sp.product.name);
     const stapleNames = stapleIngredients.map(s => s.name);
 
@@ -684,7 +684,7 @@ function buildWhyText(
   preferences: RecipePreference,
 ): string {
   const parts: string[] = [template.whyHint];
-  if (nutrition.kcalPerServing <= preferences.maxKcal) {
+  if (nutrition.kcalPer100g <= preferences.maxKcal) {
     parts.push(`fits your ${preferences.maxKcal} kcal limit`);
   }
   if (nutrition.proteinG !== null && nutrition.proteinG >= 15) {

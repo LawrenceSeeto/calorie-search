@@ -10,9 +10,11 @@ export interface Product {
   servingSize: string | null;
   servingGrams: number | null;
   countries: string[];
-  colesUrl: string;
-  woolworthsUrl: string;
-  imageUrl: string | null;
+  colesUrl: string | null;
+  woolworthsUrl: string | null;
+  aldiUrl: string | null;
+  igaUrl: string | null;
+  costcoUrl: string | null;
   sourceUrl: string;
 }
 

@@ -82,6 +82,7 @@ const stored = loadBasket();
 
 export default function App() {
   const [submittedQuery, setSubmittedQuery] = useState('');
+  const [liveQuery, setLiveQuery] = useState('');
 
   const [basket, dispatch] = useReducer(basketReducer, {
     items: stored?.items ?? [],
@@ -110,6 +111,27 @@ export default function App() {
         ? prev.filter(r => r.id !== recipe.id)
         : [...prev, recipe],
     );
+  }, []);
+
+  useEffect(() => {
+    const nextQuery = liveQuery.trim();
+    if (nextQuery === submittedQuery) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSubmittedQuery(nextQuery);
+    }, 500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [liveQuery, submittedQuery]);
+
+  const handleQueryChange = useCallback((q: string) => {
+    setLiveQuery(q);
+  }, []);
+
+  const handleSearch = useCallback((q: string) => {
+    const nextQuery = q.trim();
+    setLiveQuery(q);
+    setSubmittedQuery(nextQuery);
   }, []);
 
   // ── Search query ─────────────────────────────────────────────────────────────
@@ -183,21 +205,28 @@ export default function App() {
         <h1>Calorie Search</h1>
         <p>Find the lowest-calorie products for any food — sorted by kcal per 100g · Australia &amp; New Zealand</p>
         <p className="free-note">Free to use — no account needed.</p>
-        <SearchForm onSearch={setSubmittedQuery} disabled={isLoading} />
-        {searchState.phase === 'idle' && <SearchChips onSearch={setSubmittedQuery} />}
+        <SearchForm
+          onSearch={handleSearch}
+          onQueryChange={handleQueryChange}
+          disabled={isLoading}
+        />
+        {searchState.phase === 'idle' && <SearchChips onSearch={handleSearch} />}
       </header>
 
       <div className="app-layout">
         {/* Left: search results */}
         <main>
-          <div className="status" aria-live="polite" aria-atomic="true">
-            <SearchStatus state={searchState} onRetry={retry} />
-          </div>
-          {searchState.phase === 'success' && (
+          {searchState.phase === 'error' && (
+            <div className="status" aria-live="polite" aria-atomic="true">
+              <SearchStatus state={searchState} onRetry={retry} />
+            </div>
+          )}
+          {(searchState.phase === 'loading' || searchState.phase === 'success') && (
             <ProductGrid
               results={searchState.results}
               total={searchState.total}
               query={searchState.query}
+              isLoading={searchState.phase === 'loading'}
               basketCodes={basketCodes}
               onAddToBasket={handleAddToBasket}
             />
